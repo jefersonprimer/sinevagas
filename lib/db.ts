@@ -62,25 +62,87 @@ let memoryUsers: User[] = [];
 let memoryJobs: Job[] = [];
 let memoryApplications: Application[] = [];
 
-const connectionString = process.env.DATABASE_URL || 'postgres://sinevagas:sinevagas_password@localhost:5432/sinevagas_db';
+declare global {
+  var _pgPool: Pool | undefined;
+}
 
-let pool: Pool | null = null;
-try {
-  const isSupabase = connectionString.includes('supabase') || connectionString.includes('sslmode=require');
-  pool = new Pool({
-    connectionString,
-    connectionTimeoutMillis: 5000,
-    ssl: isSupabase ? { rejectUnauthorized: false } : undefined,
-  });
-} catch {
-  pool = null;
+export function getPool(): Pool | null {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    return null;
+  }
+
+  if (!global._pgPool) {
+    const isLocalhost = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+    global._pgPool = new Pool({
+      connectionString,
+      connectionTimeoutMillis: 10000,
+      ssl: isLocalhost ? undefined : { rejectUnauthorized: false },
+    });
+  }
+  return global._pgPool;
 }
 
 let columnsMigrated = false;
 async function ensureUserColumns() {
+  const pool = getPool();
   if (!pool || columnsMigrated) return;
   try {
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        last_name VARCHAR(255),
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL DEFAULT 'candidate',
+        avatar_url TEXT,
+        employment_status VARCHAR(255),
+        location VARCHAR(255),
+        resume_url TEXT,
+        preferred_role VARCHAR(255),
+        expected_salary VARCHAR(100),
+        preferred_contract VARCHAR(50),
+        professional_summary TEXT,
+        cpf VARCHAR(20),
+        phone VARCHAR(50),
+        linkedin_url TEXT,
+        github_url TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS jobs (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        company VARCHAR(255) NOT NULL,
+        location VARCHAR(255) NOT NULL,
+        contract_type VARCHAR(50) NOT NULL,
+        salary VARCHAR(100),
+        description TEXT NOT NULL,
+        requirements TEXT,
+        user_id INT REFERENCES users(id) ON DELETE CASCADE,
+        application_type VARCHAR(50) DEFAULT 'internal',
+        external_url TEXT,
+        contact_whatsapp VARCHAR(50),
+        contact_email VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS applications (
+        id SERIAL PRIMARY KEY,
+        job_id INT REFERENCES jobs(id) ON DELETE CASCADE,
+        candidate_id INT REFERENCES users(id) ON DELETE SET NULL,
+        candidate_name VARCHAR(255) NOT NULL,
+        candidate_email VARCHAR(255) NOT NULL,
+        candidate_phone VARCHAR(50),
+        candidate_location VARCHAR(255),
+        linkedin_url TEXT,
+        github_url TEXT,
+        resume_link TEXT NOT NULL,
+        cover_letter TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
       ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(255);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS employment_status VARCHAR(255);
@@ -107,11 +169,12 @@ async function ensureUserColumns() {
     `);
     columnsMigrated = true;
   } catch (err) {
-    console.error('Aviso ao garantir colunas no banco de dados:', err);
+    console.error('Aviso ao garantir tabelas e colunas no banco de dados:', err);
   }
 }
 
 export async function query<T = any>(text: string, params?: any[]): Promise<T[]> {
+  const pool = getPool();
   if (pool) {
     try {
       await ensureUserColumns();
@@ -127,7 +190,7 @@ export async function query<T = any>(text: string, params?: any[]): Promise<T[]>
 export const db = {
   // USERS
   async findUserByEmail(email: string): Promise<User | null> {
-    if (pool) {
+    if (getPool()) {
       try {
         await ensureUserColumns();
         const rows = await query<User>('SELECT * FROM users WHERE email = $1', [email]);
@@ -140,7 +203,7 @@ export const db = {
   },
 
   async findUserById(id: number): Promise<User | null> {
-    if (pool) {
+    if (getPool()) {
       try {
         await ensureUserColumns();
         const rows = await query<User>('SELECT * FROM users WHERE id = $1', [id]);
@@ -153,7 +216,7 @@ export const db = {
   },
 
   async createUser(name: string, email: string, password_hash: string, role: 'candidate' | 'recruiter'): Promise<User> {
-    if (pool) {
+    if (getPool()) {
       try {
         await ensureUserColumns();
         const rows = await query<User>(
@@ -197,7 +260,7 @@ export const db = {
       github_url?: string | null;
     }
   ): Promise<User | null> {
-    if (pool) {
+    if (getPool()) {
       try {
         await ensureUserColumns();
         const rows = await query<User>(
@@ -276,7 +339,7 @@ export const db = {
   },
 
   async deleteUser(id: number): Promise<boolean> {
-    if (pool) {
+    if (getPool()) {
       try {
         await query('DELETE FROM users WHERE id = $1', [id]);
         return true;
@@ -294,7 +357,7 @@ export const db = {
 
   // JOBS
   async getJobs(search?: string, type?: string, location?: string): Promise<Job[]> {
-    if (pool) {
+    if (getPool()) {
       try {
         let sql = 'SELECT j.*, u.avatar_url as recruiter_avatar_url FROM jobs j LEFT JOIN users u ON j.user_id = u.id WHERE 1=1';
         const params: any[] = [];
@@ -349,7 +412,7 @@ export const db = {
   },
 
   async getJobById(id: number): Promise<Job | null> {
-    if (pool) {
+    if (getPool()) {
       try {
         const rows = await query<Job>('SELECT j.*, u.avatar_url as recruiter_avatar_url FROM jobs j LEFT JOIN users u ON j.user_id = u.id WHERE j.id = $1', [id]);
         if (rows.length > 0) return rows[0];
@@ -373,7 +436,7 @@ export const db = {
       recruiterAvatar = recruiter?.avatar_url || undefined;
     }
 
-    if (pool) {
+    if (getPool()) {
       try {
         const rows = await query<Job>(
           'INSERT INTO jobs (title, company, location, contract_type, salary, description, requirements, user_id, application_type, external_url, contact_whatsapp, contact_email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *',
@@ -414,7 +477,7 @@ export const db = {
   },
 
   async deleteJob(id: number, userId: number): Promise<boolean> {
-    if (pool) {
+    if (getPool()) {
       try {
         const rows = await query<Job>('DELETE FROM jobs WHERE id = $1 AND user_id = $2 RETURNING id', [id, userId]);
         if (rows.length > 0) return true;
@@ -432,7 +495,7 @@ export const db = {
 
   // APPLICATIONS
   async createApplication(data: Omit<Application, 'id' | 'created_at'>): Promise<Application> {
-    if (pool) {
+    if (getPool()) {
       try {
         const rows = await query<Application>(
           'INSERT INTO applications (job_id, candidate_id, candidate_name, candidate_email, candidate_phone, candidate_location, linkedin_url, github_url, resume_link, cover_letter) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
@@ -467,7 +530,7 @@ export const db = {
   },
 
   async getApplicationsForCandidate(candidateId: number): Promise<Application[]> {
-    if (pool) {
+    if (getPool()) {
       try {
         const rows = await query<Application>(
           `SELECT a.*, j.title as job_title, j.company 
@@ -486,7 +549,7 @@ export const db = {
   },
 
   async getApplicationsForRecruiter(recruiterId: number): Promise<Application[]> {
-    if (pool) {
+    if (getPool()) {
       try {
         const rows = await query<Application>(
           `SELECT a.*, j.title as job_title, j.company 
