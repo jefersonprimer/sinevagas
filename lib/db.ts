@@ -58,100 +58,19 @@ export interface Application {
 }
 
 // Memory fallback store
-let memoryUsers: User[] = [
-  {
-    id: 1,
-    name: 'TechCorp',
-    last_name: 'Recrutamento',
-    email: 'recruiter@techcorp.com',
-    password_hash: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
-    role: 'recruiter',
-    employment_status: 'Recrutador Ativo',
-    location: 'São Paulo, SP',
-    preferred_role: 'Líder de Recrutamento',
-    expected_salary: 'N/A',
-    preferred_contract: 'CLT',
-    professional_summary: 'Recrutador responsável pela contratação de talentos de tecnologia.',
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    name: 'Maria',
-    last_name: 'Silva',
-    email: 'maria.silva@email.com',
-    password_hash: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
-    role: 'candidate',
-    employment_status: 'Em busca de oportunidades',
-    location: 'Rio de Janeiro, RJ',
-    preferred_role: 'Desenvolvedora Frontend Senior',
-    expected_salary: 'R$ 12.000 / mês',
-    preferred_contract: 'PJ',
-    professional_summary: 'Desenvolvedora apaixonada por interfaces modernas com React, Next.js e TypeScript.',
-    created_at: new Date().toISOString(),
-  }
-];
-
-let memoryJobs: Job[] = [
-  {
-    id: 1,
-    title: 'Desenvolvedor Frontend Senior (React / Next.js)',
-    company: 'TechCorp Brasil',
-    location: 'Remoto',
-    contract_type: 'PJ',
-    salary: 'R$ 12.000 - R$ 16.000 / mês',
-    description: 'Buscamos um desenvolvedor frontend experiente para atuar no desenvolvimento de aplicações modernas com React, Next.js e TypeScript. Você trabalhará em colaboração com designers e especialistas em UX para entregar interfaces rápidas e responsivas.',
-    requirements: 'Experiência sólida em React, Next.js (App Router), Tailwind CSS e consumo de APIs REST/GraphQL. Conhecimento em testes automatizados.',
-    user_id: 1,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    title: 'UI/UX Designer Pleno',
-    company: 'DesignStudio Studio',
-    location: 'São Paulo, SP (Híbrido)',
-    contract_type: 'CLT',
-    salary: 'R$ 7.500 - R$ 9.500 / mês',
-    description: 'Procuramos um profissional apaixonado por criar experiências incríveis para usuários. Você será responsável por construir wireframes, protótipos interativos e design systems para nossos clientes.',
-    requirements: 'Figma avançado, criação de Design Systems, testes de usabilidade e pesquisa com usuários.',
-    user_id: 1,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 3,
-    title: 'Desenvolvedor Backend Node.js / Go',
-    company: 'Inovação Cloud',
-    location: 'Remoto',
-    contract_type: 'PJ',
-    salary: 'R$ 10.000 - R$ 14.000 / mês',
-    description: 'Venha integrar nosso time de infraestrutura e serviços backend. Desenvolverá microserviços escaláveis, APIs de alta performance e microsserviços integrados a bancos de dados PostgreSQL.',
-    requirements: 'Experiência com Node.js ou Go, PostgreSQL, Docker, Kubernetes e mensageria.',
-    user_id: 1,
-    created_at: new Date().toISOString(),
-  }
-];
-
-let memoryApplications: Application[] = [
-  {
-    id: 1,
-    job_id: 1,
-    candidate_id: 2,
-    candidate_name: 'Maria Silva',
-    candidate_email: 'maria.silva@email.com',
-    resume_link: 'https://linkedin.com/in/mariasilva-dev',
-    cover_letter: 'Tenho 5 anos de experiência com React e Next.js. Adoraria contribuir com o time!',
-    created_at: new Date().toISOString(),
-    job_title: 'Desenvolvedor Frontend Senior (React / Next.js)',
-    company: 'TechCorp Brasil'
-  }
-];
+let memoryUsers: User[] = [];
+let memoryJobs: Job[] = [];
+let memoryApplications: Application[] = [];
 
 const connectionString = process.env.DATABASE_URL || 'postgres://sinevagas:sinevagas_password@localhost:5432/sinevagas_db';
 
 let pool: Pool | null = null;
 try {
+  const isSupabase = connectionString.includes('supabase') || connectionString.includes('sslmode=require');
   pool = new Pool({
     connectionString,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 5000,
+    ssl: isSupabase ? { rejectUnauthorized: false } : undefined,
   });
 } catch {
   pool = null;
