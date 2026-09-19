@@ -23,7 +23,12 @@ export function JobCard({
   onToggleSaveJob,
   onDeleteJob,
 }: JobCardProps) {
-  const isOwner = currentUserId && job.user_id === currentUserId;
+  const isOwner = Boolean(
+    currentUserId &&
+      (job.user_id === undefined ||
+        job.user_id === null ||
+        Number(job.user_id) === Number(currentUserId))
+  );
 
   const formattedDate = new Date(job.created_at).toLocaleDateString("pt-BR", {
     day: "2-digit",

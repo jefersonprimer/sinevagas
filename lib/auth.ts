@@ -36,17 +36,47 @@ export function verifyToken(token: string): TokenPayload | null {
   }
 }
 
-export async function getCurrentUser(): Promise<User | null> {
+export async function getCurrentUser(req?: Request): Promise<User | null> {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
+    let token: string | undefined;
+
+    if (req) {
+      const authHeader = req.headers.get('authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+      if (!token) {
+        const cookieHeader = req.headers.get('cookie');
+        if (cookieHeader) {
+          const match = cookieHeader.match(/(?:^|;\s*)token=([^;]*)/);
+          if (match) {
+            token = match[1];
+          }
+        }
+      }
+    }
+
+    if (!token) {
+      const cookieStore = await cookies();
+      token = cookieStore.get('token')?.value;
+    }
 
     if (!token) return null;
 
     const payload = verifyToken(token);
     if (!payload) return null;
 
-    return await db.findUserById(payload.userId);
+    const dbUser = await db.findUserById(payload.userId);
+    if (dbUser) return dbUser;
+
+    return {
+      id: payload.userId,
+      name: payload.email ? payload.email.split('@')[0] : 'Usuário',
+      email: payload.email,
+      password_hash: '',
+      role: payload.role || 'candidate',
+      created_at: new Date().toISOString()
+    };
   } catch {
     return null;
   }
